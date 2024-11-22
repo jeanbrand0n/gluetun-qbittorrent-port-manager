@@ -1,4 +1,4 @@
-NAME = maxmueller/gluetun-qbittorrent-port-manager
+NAME = andaplays/gluetun-qbittorrent-port-manager
 VERSION = $(shell cat version)
 
 build: Dockerfile start.sh
