@@ -1,9 +1,9 @@
 gluetun-qbittorrent-port-manager:
-  image: snoringdragon/gluetun-qbittorrent-port-manager:latest
+  image: andaplays/gluetun-qbittorrent-port-manager:latest
   restart: unless-stopped
   volumes:
-    - /yourfolder:/tmp/gluetun #Set "yourfolder" to the same directory you used for Gluetun
-  network_mode: "service: gluetun"
+    - /yourfolder:/tmp/gluetun # Set "yourfolder" to the same directory you used for Gluetun
+  network_mode: "service:gluetun"
   environment:
     QBITTORRENT_SERVER: localhost # IP Address of qbittorrent
     QBITTORRENT_PORT: 8080
