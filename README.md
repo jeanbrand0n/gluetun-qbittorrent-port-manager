@@ -16,22 +16,19 @@ Add a volume mount to your [Gluetun](https://github.com/qdm12/gluetun/) containe
 volumes:
     - /docker/gluetunvpn:/gluetun
 ```
-Enable the Control Server
-Set the following environment variables in your Gluetun container:
+Enable the Control Server. Set the following environment variables in your Gluetun container:
 ```
 environment:
   - CONTROL_SERVER=on
   - CONTROL_SERVER_ALLOW_CIDRS=192.168.1.0/24
 ```
-Publish the Control Server Port
-To make the Control Server externally accessible, map the internal port 8000 to a host port (e.g., 8000):
+Publish the Control Server Port. To make the Control Server externally accessible, map the internal port 8000 to a host port (e.g., 8000):
 ```
 ports:
   - 8000:8000/tcp  # Control Server (accessible externally via port 8000, first port external, second port internal)
 ```
 
 ## Setting Up Gluetun-qBittorrent Port Manager
-Volume Mount
 Ensure that the correct volume is mounted so that the container can access any necessary shared data. For example:
 ```
 volumes:
