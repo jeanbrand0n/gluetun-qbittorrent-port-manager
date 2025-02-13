@@ -1,23 +1,28 @@
+services:
   gluetun-qbittorrent-port-manager:
     image: andaplays/gluetun-qbittorrent-port-manager:latest
     restart: unless-stopped
-    # Example: Adjust the host path to match your environment.
+    # Adjust the host path as needed for your environment.
     volumes:
       - /path/on/your/host:/tmp/gluetun
     environment:
       # qBittorrent connection details
-      QBITTORRENT_SERVER: IP from qBittorrent # Replace with your qBittorrent server's IP address
-      QBITTORRENT_PORT: 8080                  # Port on which qBittorrent is listening
-      QBITTORRENT_USER: admin                 # qBittorrent username
-      QBITTORRENT_PASS: adminadmin            # qBittorrent password
-      HTTP_S: http                            # Use "http" or "https" as required
-
+      QBITTORRENT_SERVER: "your-qbittorrent-server-ip"   # Replace with your qBittorrent server's IP address
+      QBITTORRENT_PORT: 8080                             # Port on which qBittorrent is listening
+      QBITTORRENT_USER: admin                            # qBittorrent username
+      QBITTORRENT_PASS: adminadmin                       # qBittorrent password
+      HTTP_S: http                                       # Use "http" or "https" as required
+      
       # Timing parameters for the update cycle
-      CHECK_INTERVAL: 120                   # Update interval in seconds (e.g., 120 seconds)
-      WAIT_TIMEOUT: 60                      # Timeout (in seconds) for waiting on VPN status changes
-      WAIT_INTERVAL: 5                      # Interval (in seconds) between VPN status checks
-
+      CHECK_INTERVAL: 120                               # Update interval in seconds (e.g., 120 seconds)
+      WAIT_TIMEOUT: 60                                  # Timeout (in seconds) for waiting on VPN status changes
+      WAIT_INTERVAL: 5                                  # Interval (in seconds) between VPN status checks
+      
       # Control Server settings
-      # Here we assume that the Gluetun Control Server is accessible within the Docker network
-      # under the hostname "gluetun" on port 8000.
-      CONTROL_SERVER_URL: http://gluetun:8000
+      # The Gluetun Control Server is assumed to be accessible within the Docker network
+      # under the hostname "localhost" on port 8000.
+      CONTROL_SERVER_URL: http://localhost:8000
+      
+      # VPN Mode settings:
+      # Options: OPENVPN, WIREGUARD, or DUMPMODE
+      VPNMODE: OPENVPN                                  # Change to WIREGUARD or DUMPMODE as needed
