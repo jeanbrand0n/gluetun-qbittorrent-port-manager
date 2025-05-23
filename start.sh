@@ -1,24 +1,21 @@
 #!/bin/bash
 
-# Set default values for environment variables if not provided
 CONTROL_SERVER_URL="${CONTROL_SERVER_URL:-http://localhost:8000}"
-CHECK_INTERVAL="${CHECK_INTERVAL:-30}"       # Interval (in seconds) between update cycles
+CHECK_INTERVAL="${CHECK_INTERVAL:-30}"
 HTTP_S="${HTTP_S:-http}"
-VPNMODE="${VPNMODE:-OPENVPN}"                  # VPN mode: OPENVPN, WIREGUARD, or DUMPMODE
-WAIT_TIMEOUT="${WAIT_TIMEOUT:-60}"           # Timeout (in seconds) for waiting on VPN status changes
-WAIT_INTERVAL="${WAIT_INTERVAL:-5}"          # Interval (in seconds) between VPN status checks
+VPNMODE="${VPNMODE:-OPENVPN}"
+WAIT_TIMEOUT="${WAIT_TIMEOUT:-60}"
+WAIT_INTERVAL="${WAIT_INTERVAL:-5}"
 
 COOKIES="/tmp/cookies.txt"
 LAST_PORT=""
 
-# Function: Remove the cookie file
 remove_cookies() {
   rm -f "$COOKIES"
 }
 
-# Function: Wait until the VPN status matches the desired state (for OPENVPN mode)
 wait_for_vpn_status() {
-  local desired_status="$1"  # "running" or "stopped"
+  local desired_status="$1"
   local timeout="${WAIT_TIMEOUT}"
   local interval="${WAIT_INTERVAL}"
   local elapsed=0
@@ -38,38 +35,44 @@ wait_for_vpn_status() {
   return 1
 }
 
-# Function: Change the VPN status via the Control Server (for OPENVPN mode)
 change_vpn_status() {
-  local status="$1"  # "running" or "stopped"
+  local status="$1"
   echo "Setting VPN status to '$status'..."
   response=$(curl -s -X PUT -H "Content-Type: application/json" \
     -d "{\"status\":\"$status\"}" "$CONTROL_SERVER_URL/v1/openvpn/status")
   echo "Response from VPN status change: $response"
-  # Wait until the desired status is reached using WAIT_TIMEOUT and WAIT_INTERVAL
   wait_for_vpn_status "$status"
 }
 
-# Function: Check if the given TCP port on the IP is open using nmap
 check_port_status() {
   local ip="$1"
   local port="$2"
-  echo "Checking TCP port $port on $ip with nmap..."
-  tcp_result=$(nmap -Pn -p "$port" "$ip" 2>/dev/null | grep "$port/tcp")
-  if echo "$tcp_result" | grep -qi "open"; then
-    echo "TCP port $port is open on $ip."
-    return 0
-  else
-    echo "WARNING: TCP port $port is closed or filtered on $ip!"
-    return 1
-  fi
+  local retries=3
+  local delay=5
+
+  for attempt in $(seq 1 $retries); do
+    echo "Checking TCP port $port on $ip with nmap (Attempt: $attempt)..."
+    tcp_result=$(nmap -Pn -p "$port" "$ip" 2>/dev/null | grep "$port/tcp")
+    if echo "$tcp_result" | grep -qi "open"; then
+      echo "TCP port $port is open on $ip."
+      return 0
+    else
+      echo "WARNING: TCP port $port is closed or filtered on $ip!"
+      if [ "$attempt" -lt "$retries" ]; then
+        echo "Retrying in $delay seconds..."
+        sleep "$delay"
+      fi
+    fi
+  done
+
+  echo "TCP port check failed after $retries attempts."
+  return 1
 }
 
-# Function: Shutdown qBittorrent using its WebUI API (for WIREGUARD mode)
 shutdown_qbittorrent() {
   echo "Shutting down qBittorrent via WebUI API..."
   remove_cookies
 
-  # Login to qBittorrent
   login_response=$(curl -s -c "$COOKIES" --data "username=$QBITTORRENT_USER&password=$QBITTORRENT_PASS" \
     "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/auth/login")
   if ! echo "$login_response" | grep -iq "Ok"; then
@@ -77,14 +80,18 @@ shutdown_qbittorrent() {
     return 1
   fi
 
-  # Call shutdown API (see https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-4.1)#shutdown-application)
   shutdown_response=$(curl -s -b "$COOKIES" -X POST \
     "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/app/shutdown")
+
+  if [ "$shutdown_response" = "" ]; then
+    echo "qBittorrent has been successfully shut down."
+  else
+    echo "Unexpected response: $shutdown_response"
+  fi
+
   remove_cookies
-  echo "qBittorrent has been shut down because the TCP port is not open."
 }
 
-# Main function: Update qBittorrent port and check port status
 update_port() {
   echo "Retrieving forwarded port from Control Server..."
   NEW_PORT=$(curl -s "$CONTROL_SERVER_URL/v1/openvpn/portforwarded" | jq -r '.port')
@@ -95,11 +102,29 @@ update_port() {
 
   if [ "$LAST_PORT" = "$NEW_PORT" ]; then
     echo "Port has not changed. Current port: $NEW_PORT. No update necessary."
-  else
-    LAST_PORT="$NEW_PORT"
-    remove_cookies
 
+    echo "Ensuring qBittorrent is reachable and correct port is set..."
+    remove_cookies
+    login_response=$(curl -s -c "$COOKIES" --data "username=$QBITTORRENT_USER&password=$QBITTORRENT_PASS" \
+      "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/auth/login")
+    if echo "$login_response" | grep -iq "Ok"; then
+      CURRENT_QBIT_PORT=$(curl -s -b "$COOKIES" "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/app/preferences" | jq -r '.listen_port')
+      if [ "$CURRENT_QBIT_PORT" != "$NEW_PORT" ]; then
+        echo "qBittorrent is reachable but using incorrect port: $CURRENT_QBIT_PORT (expected: $NEW_PORT)"
+        echo "Updating qBittorrent to port $NEW_PORT..."
+        curl -s -b "$COOKIES" --data-urlencode "json={\"listen_port\":$NEW_PORT}" \
+          "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/app/setPreferences" > /dev/null
+        echo "qBittorrent port updated."
+      else
+        echo "qBittorrent port is correctly set."
+      fi
+    else
+      echo "qBittorrent not reachable or login failed."
+    fi
+    remove_cookies
+  else
     echo "Logging into qBittorrent..."
+    remove_cookies
     login_response=$(curl -s -c "$COOKIES" --data "username=$QBITTORRENT_USER&password=$QBITTORRENT_PASS" \
       "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/auth/login")
     if ! echo "$login_response" | grep -iq "Ok"; then
@@ -110,11 +135,12 @@ update_port() {
     echo "Updating qBittorrent listening port to $NEW_PORT..."
     curl -s -b "$COOKIES" --data-urlencode "json={\"listen_port\":$NEW_PORT}" \
       "${HTTP_S}://${QBITTORRENT_SERVER}:${QBITTORRENT_PORT}/api/v2/app/setPreferences" > /dev/null
-    remove_cookies
     echo "qBittorrent successfully updated to port $NEW_PORT"
+
+    LAST_PORT="$NEW_PORT"
+    remove_cookies
   fi
 
-  # For DUMPMODE, skip the TCP port check entirely
   if [ "$VPNMODE" = "DUMPMODE" ]; then
     echo "DUMPMODE active: Port updated without TCP port check."
     return 0
@@ -144,7 +170,7 @@ update_port() {
   fi
 }
 
-# Main loop: Update port at defined intervals
+
 while true; do
   update_port
   sleep "$CHECK_INTERVAL"
