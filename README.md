@@ -2,7 +2,7 @@
 
 Automatically updates the listening port for qBittorrent to match the 
 port forwarded by [Gluetun](https://github.com/qdm12/gluetun/). This 
-project is a fork of [SnoringDragon's gluetun-qbittorrent-port-manager](https://github.com/SnoringDragon/gluetun-qbittorrent-port-manager).
+project is a fork of [AndaPlays gluetun-qbittorrent-port-manager](https://github.com/AndaPlays/gluetun-qbittorrent-port-manager).
 
 ## Overview
 
